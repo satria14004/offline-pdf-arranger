@@ -14,112 +14,47 @@ A lightweight, client-side web application for organizing and rearranging PDF pa
 
 ## How to Run
 
-### Quick Start
+### Quick Start (Single File Method)
 
-1. **Clone or download this repository**
-   ```bash
-   git clone https://github.com/yourusername/offline-pdf-arranger.git
-   cd offline-pdf-arranger
-   ```
+The easiest way to use this tool without installing git or command-line tools:
 
-2. **Open the application**
-   - Simply open `src/offline_pdf_arranger` file in your web browser
-   - Or double-click the HTML file directly
-   - Alternatively, you can open it via command line:
-     ```bash
-     open src/offline_pdf_arranger  # macOS
-     xdg-open src/offline_pdf_arranger  # Linux
-     start src/offline_pdf_arranger  # Windows
-     ```
+1.  **Download the Source Code**
+    - Navigate to the source code file in this repository (e.g., `src/offline_pdf_arranger`).
+    - Click the **"Raw"** button (or right-click the "Raw" button and choose "Save Link As...").
 
-3. **Use the application**
-   - Click "Upload PDF" or drag-and-drop a PDF file
-   - Rearrange pages by dragging them to new positions
-   - Delete unwanted pages
-   - Click "Download PDF" to save your modified document
+2.  **Prepare the File**
+    - Save the file to your computer.
+    - Rename the file so it ends with the **`.html`** extension (e.g., rename `offline_pdf_arranger` to `offline_pdf_arranger.html`).
+
+3.  **Run in Browser**
+    - Drag and drop the `.html` file directly into any Chromium-based browser tab (Google Chrome, Microsoft Edge, Brave, etc.).
+    - Alternatively, right-click the file and select "Open with" > "Google Chrome".
+
+### Developer Setup (Git Clone)
+
+If you are a developer and want to contribute or modify the code:
+
+1.  **Clone the repository**
+    ```bash
+    git clone [https://github.com/yourusername/offline-pdf-arranger.git](https://github.com/yourusername/offline-pdf-arranger.git)
+    cd offline-pdf-arranger
+    ```
+
+2.  **Open the application**
+    ```bash
+    # Open the HTML file directly
+    open src/offline_pdf_arranger.html  # macOS
+    xdg-open src/offline_pdf_arranger.html  # Linux
+    start src/offline_pdf_arranger.html  # Windows
+    ```
 
 ### Using a Local Server (Optional)
 
-If you prefer to run it through a local web server:
+If you prefer to run it through a local web server (recommended for development):
 
 ```bash
 # Using Python 3
 python3 -m http.server 8000
 
-# Using Python 2
-python -m SimpleHTTPServer 8000
-
-# Using Node.js (if you have http-server installed)
-npx http-server
-
 # Using Node.js built-in
 node --eval "require('http').createServer((req, res) => require('fs').createReadStream(req.url.slice(1)).pipe(res)).listen(8000)"
-```
-
-Then open `http://localhost:8000/src/offline_pdf_arranger` in your browser.
-
-## Requirements
-
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-- No additional software or dependencies required
-- Works offline (except for loading the application itself)
-
-## Browser Compatibility
-
-- ✅ Chrome 90+
-- ✅ Firefox 88+
-- ✅ Safari 14+
-- ✅ Edge 90+
-
-## Technologies Used
-
-- **HTML5** - Structure
-- **Tailwind CSS** - Styling (via CDN)
-- **Font Awesome** - Icons
-- **PDF.js** - PDF rendering and manipulation
-- **Vanilla JavaScript** - Drag-and-drop functionality and PDF processing
-- **SortableJS** - Drag-and-drop list reordering
-
-## Usage Tips
-
-1. **Organizing Large PDFs** - The application handles PDFs with hundreds of pages efficiently
-2. **Memory Considerations** - Very large PDFs (1000+ pages) may require more RAM
-3. **Supported Formats** - Works with standard PDF files; encrypted PDFs may not be supported
-4. **Batch Operations** - Select multiple pages and delete them at once for efficiency
-
-## Privacy
-
-Your PDFs never leave your computer. All processing is done locally in your browser. No files are uploaded to any server.
-
-## License
-
-This project is open source and available under the MIT License.
-
-## Contributing
-
-Contributions are welcome! Feel free to fork the repository and submit pull requests for any improvements.
-
-## Troubleshooting
-
-### PDF not loading
-- Ensure the file is a valid PDF
-- Try a different PDF to test
-- Check browser console for error messages
-
-### Drag-and-drop not working
-- Ensure you're using a modern browser
-- Try refreshing the page
-- Check that JavaScript is enabled
-
-### Download not working
-- Check your browser's download settings
-- Ensure you have sufficient disk space
-- Try a different browser
-
-## Author
-
-Created as a utility for offline PDF document management.
-
----
-
-For more information or issues, please create an issue in the repository.
