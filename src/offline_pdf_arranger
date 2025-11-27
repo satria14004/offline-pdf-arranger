@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline PDF Organizer</title>
+    
+    <!-- Styles: Tailwind CSS (via CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Icons: FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* Dragging visuals */
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #e2e8f0;
+            border: 2px dashed #94a3b8 !important; /* Override dynamic border */
+        }
+        .sortable-drag {
+            cursor: grabbing;
+        }
+        
+        /* Page Card Styling */
+        .page-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            page-break-inside: avoid;
+            /* Flexbox centers the canvas */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #fff;
+            padding: 8px; /* Padding to ensure border doesn't touch content */
+        }
+        .page-card:hover .delete-btn,
+        .page-card:hover .rotate-btn {
+            opacity: 1;
+        }
+
+        /* The canvas itself */
+        canvas {
+            display: block;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden text-slate-800 font-sans">
+
+    <!-- Header & Toolbar -->
+    <header class="bg-white border-b border-slate-200 shadow-sm z-10 p-4 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 text-white p-2 rounded-lg">
+                <i class="fa-solid fa-file-pdf text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-slate-800 leading-tight">PDF Organizer</h1>
+                <p class="text-xs text-slate-500">Add PDFs, JPGs, or PNGs</p>
+            </div>
+        </div>
+
+        <div class="flex gap-3">
+            <input type="file" id="fileInput" accept="application/pdf, image/jpeg, image/png" multiple class="hidden">
+            
+            <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition font-medium text-sm">
+                <i class="fa-solid fa-plus"></i> Add Files
+            </button>
+
+            <button id="clearBtn" class="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition font-medium text-sm">
+                <i class="fa-solid fa-trash"></i> Clear All
+            </button>
+
+            <button id="saveBtn" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <i class="fa-solid fa-download"></i> Save PDF
+            </button>
+        </div>
+    </header>
+
+    <!-- Global Drag & Drop Overlay -->
+    <div id="dragOverlay" class="hidden fixed inset-0 z-50 bg-blue-50/90 flex flex-col items-center justify-center border-4 border-blue-500 border-dashed m-4 rounded-xl backdrop-blur-sm transition-all pointer-events-auto">
+        <i class="fa-solid fa-cloud-arrow-up text-6xl text-blue-500 mb-4 animate-bounce"></i>
+        <h2 class="text-3xl font-bold text-slate-700">Drop to Add Files</h2>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto p-6 relative" id="mainArea">
+        
+        <!-- Empty State (Visual Only, events handled by Overlay) -->
+        <div id="dropZone" class="absolute inset-4 border-4 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center bg-slate-50 text-slate-400 cursor-pointer" onclick="document.getElementById('fileInput').click()">
+            <i class="fa-solid fa-cloud-arrow-up text-6xl mb-4"></i>
+            <h2 class="text-2xl font-semibold mb-2">Drag & Drop Files</h2>
+            <p>PDFs, JPGs, or PNGs supported</p>
+        </div>
+
+        <!-- Progress Bar (Hidden by default) -->
+        <div id="progressContainer" class="hidden w-full max-w-xl mx-auto mt-20 text-center">
+            <p id="progressText" class="mb-2 text-slate-600 font-medium">Processing...</p>
+            <div class="w-full bg-slate-200 rounded-full h-2.5">
+                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Grid Container -->
+        <div id="gridContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pb-20 hidden">
+            <!-- Pages will be injected here -->
+        </div>
+
+    </main>
+
+    <!-- Footer Stats -->
+    <footer class="bg-white border-t border-slate-200 p-2 text-center text-xs text-slate-400 shrink-0">
+        <span id="pageCount">0 pages total</span> | Run locally in Chrome
+    </footer>
+
+    <!-- Scripts -->
+    
+    <!-- 1. PDF.js (Rendering) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- 2. PDF-Lib (Manipulation) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    
+    <!-- 3. SortableJS (Drag & Drop UI) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <script>
+        // --- State Management ---
+        let loadedDocuments = {}; 
+        let nextDocId = 1;
+        
+        const fileColors = [
+            '#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', 
+            '#db2777', '#0891b2', '#ea580c', '#4f46e5', '#ca8a04'
+        ];
+
+        const grid = document.getElementById('gridContainer');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const saveBtn = document.getElementById('saveBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const pageCountLabel = document.getElementById('pageCount');
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // --- Event Listeners ---
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Global Drag Enter (Detects dragging files into the window)
+        window.addEventListener('dragenter', (e) => {
+            // Check if dragging files
+            if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+                dragOverlay.classList.remove('hidden');
+            }
+        });
+
+        // Overlay Events
+        dragOverlay.addEventListener('dragenter', preventDefaults);
+        dragOverlay.addEventListener('dragover', preventDefaults);
+        
+        dragOverlay.addEventListener('dragleave', (e) => {
+            // Hide only if leaving the overlay element itself (and not entering a child)
+            if (e.relatedTarget === null || !dragOverlay.contains(e.relatedTarget)) {
+                dragOverlay.classList.add('hidden');
+            }
+        });
+
+        dragOverlay.addEventListener('drop', (e) => {
+            preventDefaults(e);
+            dragOverlay.classList.add('hidden');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', handleFileSelect);
+        saveBtn.addEventListener('click', savePdf);
+        clearBtn.addEventListener('click', resetApp);
+
+        // --- Core Logic ---
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+            // Reset input so same file can be selected again
+            e.target.value = '';
+        }
+
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            // UI Updates
+            dropZone.classList.add('hidden');
+            grid.classList.remove('hidden');
+            progressContainer.classList.remove('hidden');
+            saveBtn.disabled = true;
+
+            let filesProcessed = 0;
+            
+            for (const file of files) {
+                progressText.innerText = `Processing ${file.name}...`;
+                
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    
+                    if (file.type === 'application/pdf') {
+                        await loadPdf(arrayBuffer, file.name);
+                    } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
+                        await loadImage(arrayBuffer, file.name, file.type);
+                    } else {
+                        console.warn(`Skipping unsupported file: ${file.name}`);
+                    }
+                } catch (err) {
+                    alert(`Error loading ${file.name}: ${err.message}`);
+                }
+                
+                filesProcessed++;
+            }
+
+            progressContainer.classList.add('hidden');
+            saveBtn.disabled = false;
+            initSortable();
+            
+            if (document.querySelectorAll('.page-card').length === 0) {
+                 resetApp(); 
+            }
+        }
+
+        async function loadPdf(arrayBuffer, fileName) {
+            const currentDocId = nextDocId++;
+            const color = fileColors[(currentDocId - 1) % fileColors.length];
+
+            const pdfLibDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+            loadedDocuments[currentDocId] = {
+                type: 'pdf',
+                doc: pdfLibDoc,
+                name: fileName,
+                color: color
+            };
+
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdfRenderer = await loadingTask.promise;
+            const numPages = pdfRenderer.numPages;
+
+            for (let i = 1; i <= numPages; i++) {
+                await renderPdfPageThumbnail(pdfRenderer, i, currentDocId, numPages, fileName, color);
+                const pct = Math.round((i / numPages) * 100);
+                progressBar.style.width = `${pct}%`;
+            }
+            updatePageCount();
+        }
+
+        async function loadImage(arrayBuffer, fileName, mimeType) {
+            const currentDocId = nextDocId++;
+            const color = fileColors[(currentDocId - 1) % fileColors.length];
+
+            loadedDocuments[currentDocId] = {
+                type: 'image',
+                fileData: arrayBuffer,
+                mimeType: mimeType,
+                name: fileName,
+                color: color
+            };
+
+            const blob = new Blob([arrayBuffer], { type: mimeType });
+            const bitmap = await createImageBitmap(blob);
+
+            // Create offscreen canvas for source
+            const sourceCanvas = document.createElement('canvas');
+            sourceCanvas.width = bitmap.width;
+            sourceCanvas.height = bitmap.height;
+            sourceCanvas.getContext('2d').drawImage(bitmap, 0, 0);
+
+            createCard(currentDocId, 0, fileName, color, sourceCanvas);
+            updatePageCount();
+        }
+
+        async function renderPdfPageThumbnail(pdf, pageNum, docId, totalPages, fileName, color) {
+            const page = await pdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1 });
+            
+            // Create a temporary canvas for the source image
+            // We scale it down here for performance (thumbnail size)
+            const desiredWidth = 300; // Higher resolution for better rotation quality
+            const scale = desiredWidth / viewport.width;
+            const scaledViewport = page.getViewport({ scale: scale });
+
+            const sourceCanvas = document.createElement('canvas');
+            sourceCanvas.height = scaledViewport.height;
+            sourceCanvas.width = scaledViewport.width;
+            
+            await page.render({
+                canvasContext: sourceCanvas.getContext('2d'),
+                viewport: scaledViewport
+            }).promise;
+
+            createCard(docId, pageNum - 1, fileName + ' - ' + pageNum, color, sourceCanvas);
+        }
+
+        function createCard(docId, pageIndex, labelText, color, sourceCanvas) {
+            // sourceCanvas is our "Original" (0 degrees)
+            const width = sourceCanvas.width;
+            const height = sourceCanvas.height;
+
+            // Create DOM structure
+            const card = document.createElement('div');
+            card.className = 'page-card bg-white rounded-lg shadow-md overflow-hidden relative group cursor-grab active:cursor-grabbing select-none';
+            card.style.border = `2px solid ${color}`;
+            
+            // Attach state
+            card.setAttribute('data-doc-id', docId);
+            card.setAttribute('data-page-index', pageIndex);
+            card.setAttribute('data-rotation-degrees', 0);
+            
+            // Store the source canvas in memory on the element for redrawing
+            card.sourceCanvas = sourceCanvas; 
+
+            // Display Canvas
+            const displayCanvas = document.createElement('canvas');
+            displayCanvas.className = 'display-canvas';
+            // Initial draw
+            displayCanvas.width = width;
+            displayCanvas.height = height;
+            displayCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0);
+            
+            card.appendChild(displayCanvas);
+
+            // Overlays
+            const numberOverlay = document.createElement('div');
+            numberOverlay.className = 'absolute bottom-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm pointer-events-none shadow-sm z-10';
+            numberOverlay.style.backgroundColor = color; 
+            numberOverlay.innerText = labelText;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md opacity-0 transition-opacity duration-200 z-20';
+            deleteBtn.innerHTML = '<i class="fa-solid fa-times"></i>';
+            deleteBtn.onclick = (e) => { e.stopPropagation(); removePage(card); };
+
+            const rotateBtn = document.createElement('button');
+            rotateBtn.className = 'rotate-btn absolute top-2 left-2 bg-slate-700/80 hover:bg-slate-800 text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md opacity-0 transition-opacity duration-200 z-20';
+            rotateBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i>';
+            rotateBtn.onclick = (e) => { e.stopPropagation(); rotatePage(card); };
+
+            card.appendChild(numberOverlay);
+            card.appendChild(deleteBtn);
+            card.appendChild(rotateBtn);
+            grid.appendChild(card);
+        }
+
+        function rotatePage(card) {
+            const displayCanvas = card.querySelector('.display-canvas');
+            const sourceCanvas = card.sourceCanvas;
+            
+            let currentRotation = parseInt(card.getAttribute('data-rotation-degrees'));
+            let newRotation = (currentRotation + 90) % 360;
+            
+            // Re-draw logic
+            const ctx = displayCanvas.getContext('2d');
+            const w = sourceCanvas.width;
+            const h = sourceCanvas.height;
+            
+            // Resize canvas based on rotation
+            if (newRotation === 90 || newRotation === 270) {
+                displayCanvas.width = h;
+                displayCanvas.height = w;
+            } else {
+                displayCanvas.width = w;
+                displayCanvas.height = h;
+            }
+
+            // Transform context to draw rotated image
+            ctx.save();
+            ctx.translate(displayCanvas.width / 2, displayCanvas.height / 2);
+            ctx.rotate(newRotation * Math.PI / 180);
+            ctx.drawImage(sourceCanvas, -w / 2, -h / 2);
+            ctx.restore();
+
+            card.setAttribute('data-rotation-degrees', newRotation);
+        }
+
+        function removePage(cardElement) {
+            cardElement.remove();
+            updatePageCount();
+        }
+
+        function updatePageCount() {
+            const count = document.querySelectorAll('.page-card').length;
+            pageCountLabel.innerText = `${count} pages total`;
+        }
+
+        function initSortable() {
+            if (window.sortableInstance) return;
+            window.sortableInstance = new Sortable(grid, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                delay: 0,
+                // Auto-scroll configuration
+                scroll: document.getElementById('mainArea'), // The container to scroll
+                scrollSensitivity: 150, // Distance from edge (px) to trigger scroll
+                scrollSpeed: 20, // Speed of the scrolling
+                bubbleScroll: true // Apply scroll to parent elements if needed
+            });
+        }
+
+        async function savePdf() {
+            const oldText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<div class="loader w-4 h-4 border-2 border-white border-t-transparent"></div> Saving...';
+            saveBtn.disabled = true;
+
+            try {
+                const newPdfDoc = await PDFLib.PDFDocument.create();
+                const cards = document.querySelectorAll('.page-card');
+                
+                if (cards.length === 0) throw new Error("No pages to save");
+
+                for (const card of cards) {
+                    const docId = card.getAttribute('data-doc-id');
+                    const pageIndex = parseInt(card.getAttribute('data-page-index'));
+                    const userRotation = parseInt(card.getAttribute('data-rotation-degrees')) || 0;
+                    
+                    const sourceData = loadedDocuments[docId];
+                    if (!sourceData) continue;
+
+                    if (sourceData.type === 'pdf') {
+                        // PDF Processing
+                        const [copiedPage] = await newPdfDoc.copyPages(sourceData.doc, [pageIndex]);
+                        
+                        // Handle Rotation Logic for PDF pages
+                        // We must add user rotation to existing page rotation
+                        const existingRotation = copiedPage.getRotation().angle;
+                        const finalRotation = (existingRotation + userRotation) % 360;
+                        copiedPage.setRotation(PDFLib.degrees(finalRotation));
+                        
+                        newPdfDoc.addPage(copiedPage);
+
+                    } else if (sourceData.type === 'image') {
+                        // Image Processing
+                        let image;
+                        if (sourceData.mimeType === 'image/jpeg') {
+                            image = await newPdfDoc.embedJpg(sourceData.fileData);
+                        } else {
+                            image = await newPdfDoc.embedPng(sourceData.fileData);
+                        }
+
+                        const page = newPdfDoc.addPage([image.width, image.height]);
+                        
+                        // Draw image
+                        page.drawImage(image, {
+                            x: 0,
+                            y: 0,
+                            width: image.width,
+                            height: image.height,
+                        });
+
+                        // Apply User Rotation
+                        if (userRotation !== 0) {
+                            page.setRotation(PDFLib.degrees(userRotation));
+                        }
+                    }
+                }
+
+                const pdfBytes = await newPdfDoc.save();
+                downloadBlob(pdfBytes, 'combined_document.pdf', 'application/pdf');
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to save PDF: " + err.message);
+            } finally {
+                saveBtn.innerHTML = oldText;
+                saveBtn.disabled = false;
+            }
+        }
+
+        function downloadBlob(data, fileName, mimeType) {
+            const blob = new Blob([data], { type: mimeType });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function resetApp() {
+            grid.innerHTML = '';
+            grid.classList.add('hidden');
+            dropZone.classList.remove('hidden');
+            progressContainer.classList.add('hidden');
+            fileInput.value = '';
+            loadedDocuments = {};
+            nextDocId = 1;
+            saveBtn.disabled = true;
+            updatePageCount();
+        }
+    </script>
+</body>
+</html>
