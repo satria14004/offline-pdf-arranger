@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Offline PDF Organizer</title>
-    
-    <!-- Styles: Tailwind CSS (via CDN) -->
+
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Icons: FontAwesome -->
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
@@ -16,51 +15,69 @@
         ::-webkit-scrollbar {
             width: 8px;
         }
+
         ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
+            background: #f1f1f1;
         }
+
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
+            background: #cbd5e1;
             border-radius: 4px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
+            background: #94a3b8;
         }
 
         /* Dragging visuals */
         .sortable-ghost {
             opacity: 0.4;
             background-color: #e2e8f0;
-            border: 2px dashed #94a3b8 !important; /* Override dynamic border */
+            border: 2px dashed #94a3b8 !important;
+            /* Override dynamic border */
         }
+
         .sortable-drag {
             cursor: grabbing;
         }
-        
+
         /* Page Card Styling */
         .page-card {
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.1s, box-shadow 0.1s;
+            /* Faster transition for snappy feel */
             page-break-inside: avoid;
-            /* Flexbox centers the canvas */
             display: flex;
             justify-content: center;
             align-items: center;
             background-color: #fff;
-            padding: 8px; /* Padding to ensure border doesn't touch content */
+            padding: 8px;
+            position: relative;
         }
+
         .page-card:hover .delete-btn,
         .page-card:hover .rotate-btn {
             opacity: 1;
         }
 
+        /* Highlight/Selection Style */
+        .page-card.selected {
+            background-color: #eff6ff;
+            /* Light blue bg */
+            transform: scale(0.95);
+            box-shadow: 0 0 0 3px #3b82f6, 0 8px 16px rgba(59, 130, 246, 0.3);
+            z-index: 10;
+        }
+
         /* The canvas itself */
         canvas {
             display: block;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             max-width: 100%;
             height: auto;
+            pointer-events: none;
+            /* Let clicks pass through to the card */
         }
-        
+
         /* Loading Spinner */
         .loader {
             border: 4px solid #f3f3f3;
@@ -70,15 +87,21 @@
             height: 30px;
             animation: spin 1s linear infinite;
         }
+
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
+
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden text-slate-800 font-sans">
 
-    <!-- Header & Toolbar -->
     <header class="bg-white border-b border-slate-200 shadow-sm z-10 p-4 flex justify-between items-center shrink-0">
         <div class="flex items-center gap-3">
             <div class="bg-blue-600 text-white p-2 rounded-lg">
@@ -86,44 +109,46 @@
             </div>
             <div>
                 <h1 class="text-xl font-bold text-slate-800 leading-tight">PDF Organizer</h1>
-                <p class="text-xs text-slate-500">Add PDFs, JPGs, or PNGs</p>
+                <p class="text-xs text-slate-500">Ctrl + Click to Select Multiple</p>
             </div>
         </div>
-
         <div class="flex gap-3">
             <input type="file" id="fileInput" accept="application/pdf, image/jpeg, image/png" multiple class="hidden">
-            
-            <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition font-medium text-sm">
+
+            <button onclick="document.getElementById('fileInput').click()"
+                class="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition font-medium text-sm">
                 <i class="fa-solid fa-plus"></i> Add Files
             </button>
 
-            <button id="clearBtn" class="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition font-medium text-sm">
+            <button id="clearBtn"
+                class="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition font-medium text-sm">
                 <i class="fa-solid fa-trash"></i> Clear All
             </button>
 
-            <button id="saveBtn" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <button id="saveBtn"
+                class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
                 <i class="fa-solid fa-download"></i> Save PDF
             </button>
         </div>
     </header>
 
-    <!-- Global Drag & Drop Overlay -->
-    <div id="dragOverlay" class="hidden fixed inset-0 z-50 bg-blue-50/90 flex flex-col items-center justify-center border-4 border-blue-500 border-dashed m-4 rounded-xl backdrop-blur-sm transition-all pointer-events-auto">
+    <div id="dragOverlay"
+        class="hidden fixed inset-0 z-50 bg-blue-50/90 flex flex-col items-center justify-center border-4 border-blue-500 border-dashed m-4 rounded-xl backdrop-blur-sm transition-all pointer-events-auto">
         <i class="fa-solid fa-cloud-arrow-up text-6xl text-blue-500 mb-4 animate-bounce"></i>
         <h2 class="text-3xl font-bold text-slate-700">Drop to Add Files</h2>
     </div>
 
-    <!-- Main Content Area -->
     <main class="flex-1 overflow-y-auto p-6 relative" id="mainArea">
-        
-        <!-- Empty State (Visual Only, events handled by Overlay) -->
-        <div id="dropZone" class="absolute inset-4 border-4 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center bg-slate-50 text-slate-400 cursor-pointer" onclick="document.getElementById('fileInput').click()">
+
+        <div id="dropZone"
+            class="absolute inset-4 border-4 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center bg-slate-50 text-slate-400 cursor-pointer"
+            onclick="document.getElementById('fileInput').click()">
             <i class="fa-solid fa-cloud-arrow-up text-6xl mb-4"></i>
             <h2 class="text-2xl font-semibold mb-2">Drag & Drop Files</h2>
             <p>PDFs, JPGs, or PNGs supported</p>
         </div>
 
-        <!-- Progress Bar (Hidden by default) -->
         <div id="progressContainer" class="hidden w-full max-w-xl mx-auto mt-20 text-center">
             <p id="progressText" class="mb-2 text-slate-600 font-medium">Processing...</p>
             <div class="w-full bg-slate-200 rounded-full h-2.5">
@@ -131,39 +156,42 @@
             </div>
         </div>
 
-        <!-- Grid Container -->
-        <div id="gridContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pb-20 hidden">
-            <!-- Pages will be injected here -->
+        <div id="gridContainer"
+            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pb-20 hidden">
         </div>
 
     </main>
 
-    <!-- Footer Stats -->
     <footer class="bg-white border-t border-slate-200 p-2 text-center text-xs text-slate-400 shrink-0">
         <span id="pageCount">0 pages total</span> | Run locally in Chrome
     </footer>
 
-    <!-- Scripts -->
-    
-    <!-- 1. PDF.js (Rendering) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    
-    <!-- 2. PDF-Lib (Manipulation) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-    
-    <!-- 3. SortableJS (Drag & Drop UI) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/plugins/MultiDrag/MultiDrag.min.js"></script>
 
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                initializeApp();
+            } catch (error) {
+                console.error("Initialization Failed:", error);
+                alert("App failed to initialize. See console for details.");
+            }
+        });
+
         // --- State Management ---
-        let loadedDocuments = {}; 
+        let loadedDocuments = {};
         let nextDocId = 1;
-        
+        let collapsedDocuments = new Set();
+
         const fileColors = [
-            '#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', 
+            '#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea',
             '#db2777', '#0891b2', '#ea580c', '#4f46e5', '#ca8a04'
         ];
 
+        // DOM Elements
         const grid = document.getElementById('gridContainer');
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -175,90 +203,99 @@
         const pageCountLabel = document.getElementById('pageCount');
         const dragOverlay = document.getElementById('dragOverlay');
 
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        function initializeApp() {
+            // Setup PDF.js
+            if (typeof pdfjsLib !== 'undefined') {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
 
-        // --- Event Listeners ---
+            // Mount MultiDrag
+            try {
+                const MultiDragPlugin = window.MultiDrag || Sortable.MultiDrag;
+                if (MultiDragPlugin) {
+                    Sortable.mount(new MultiDragPlugin());
+                }
+            } catch (e) {
+                console.error("Failed to mount Sortable plugin:", e);
+            }
+
+            // Global Drag Listeners
+            window.addEventListener('dragenter', (e) => {
+                if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
+                    dragOverlay.classList.remove('hidden');
+                }
+            });
+
+            dragOverlay.addEventListener('dragenter', preventDefaults);
+            dragOverlay.addEventListener('dragover', preventDefaults);
+            dragOverlay.addEventListener('dragleave', (e) => {
+                if (e.relatedTarget === null || !dragOverlay.contains(e.relatedTarget)) {
+                    dragOverlay.classList.add('hidden');
+                }
+            });
+            dragOverlay.addEventListener('drop', (e) => {
+                preventDefaults(e);
+                dragOverlay.classList.add('hidden');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            fileInput.addEventListener('change', handleFileSelect);
+            saveBtn.addEventListener('click', savePdf);
+            clearBtn.addEventListener('click', resetApp);
+
+            // Click outside to deselect
+            document.addEventListener('click', (e) => {
+                // If we click outside any card, clear Sortable selection
+                if (window.sortableInstance && !e.target.closest('.page-card') && !e.target.closest('button')) {
+                    Sortable.utils.deselect(window.sortableInstance.el);
+                }
+            });
+        }
 
         function preventDefaults(e) {
             e.preventDefault();
             e.stopPropagation();
         }
 
-        // Global Drag Enter (Detects dragging files into the window)
-        window.addEventListener('dragenter', (e) => {
-            // Check if dragging files
-            if (e.dataTransfer.types && e.dataTransfer.types.includes('Files')) {
-                dragOverlay.classList.remove('hidden');
-            }
-        });
-
-        // Overlay Events
-        dragOverlay.addEventListener('dragenter', preventDefaults);
-        dragOverlay.addEventListener('dragover', preventDefaults);
-        
-        dragOverlay.addEventListener('dragleave', (e) => {
-            // Hide only if leaving the overlay element itself (and not entering a child)
-            if (e.relatedTarget === null || !dragOverlay.contains(e.relatedTarget)) {
-                dragOverlay.classList.add('hidden');
-            }
-        });
-
-        dragOverlay.addEventListener('drop', (e) => {
-            preventDefaults(e);
-            dragOverlay.classList.add('hidden');
-            handleFiles(e.dataTransfer.files);
-        });
-
-        fileInput.addEventListener('change', handleFileSelect);
-        saveBtn.addEventListener('click', savePdf);
-        clearBtn.addEventListener('click', resetApp);
-
         // --- Core Logic ---
 
         function handleFileSelect(e) {
             const files = e.target.files;
             handleFiles(files);
-            // Reset input so same file can be selected again
             e.target.value = '';
         }
 
         async function handleFiles(files) {
             if (files.length === 0) return;
-            
-            // UI Updates
+
             dropZone.classList.add('hidden');
             grid.classList.remove('hidden');
             progressContainer.classList.remove('hidden');
             saveBtn.disabled = true;
 
             let filesProcessed = 0;
-            
+
             for (const file of files) {
                 progressText.innerText = `Processing ${file.name}...`;
-                
                 try {
                     const arrayBuffer = await file.arrayBuffer();
-                    
                     if (file.type === 'application/pdf') {
                         await loadPdf(arrayBuffer, file.name);
                     } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
                         await loadImage(arrayBuffer, file.name, file.type);
-                    } else {
-                        console.warn(`Skipping unsupported file: ${file.name}`);
                     }
                 } catch (err) {
-                    alert(`Error loading ${file.name}: ${err.message}`);
+                    console.error(err);
                 }
-                
                 filesProcessed++;
             }
 
             progressContainer.classList.add('hidden');
             saveBtn.disabled = false;
             initSortable();
-            
+
             if (document.querySelectorAll('.page-card').length === 0) {
-                 resetApp(); 
+                resetApp();
             }
         }
 
@@ -267,6 +304,7 @@
             const color = fileColors[(currentDocId - 1) % fileColors.length];
 
             const pdfLibDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+
             loadedDocuments[currentDocId] = {
                 type: 'pdf',
                 doc: pdfLibDoc,
@@ -277,6 +315,10 @@
             const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
             const pdfRenderer = await loadingTask.promise;
             const numPages = pdfRenderer.numPages;
+
+            if (numPages > 1) {
+                collapsedDocuments.add(currentDocId);
+            }
 
             for (let i = 1; i <= numPages; i++) {
                 await renderPdfPageThumbnail(pdfRenderer, i, currentDocId, numPages, fileName, color);
@@ -301,7 +343,6 @@
             const blob = new Blob([arrayBuffer], { type: mimeType });
             const bitmap = await createImageBitmap(blob);
 
-            // Create offscreen canvas for source
             const sourceCanvas = document.createElement('canvas');
             sourceCanvas.width = bitmap.width;
             sourceCanvas.height = bitmap.height;
@@ -314,17 +355,15 @@
         async function renderPdfPageThumbnail(pdf, pageNum, docId, totalPages, fileName, color) {
             const page = await pdf.getPage(pageNum);
             const viewport = page.getViewport({ scale: 1 });
-            
-            // Create a temporary canvas for the source image
-            // We scale it down here for performance (thumbnail size)
-            const desiredWidth = 300; // Higher resolution for better rotation quality
+
+            const desiredWidth = 300;
             const scale = desiredWidth / viewport.width;
             const scaledViewport = page.getViewport({ scale: scale });
 
             const sourceCanvas = document.createElement('canvas');
             sourceCanvas.height = scaledViewport.height;
             sourceCanvas.width = scaledViewport.width;
-            
+
             await page.render({
                 canvasContext: sourceCanvas.getContext('2d'),
                 viewport: scaledViewport
@@ -334,48 +373,73 @@
         }
 
         function createCard(docId, pageIndex, labelText, color, sourceCanvas) {
-            // sourceCanvas is our "Original" (0 degrees)
             const width = sourceCanvas.width;
             const height = sourceCanvas.height;
 
-            // Create DOM structure
             const card = document.createElement('div');
+            // 'page-card' class is important for Sortable
             card.className = 'page-card bg-white rounded-lg shadow-md overflow-hidden relative group cursor-grab active:cursor-grabbing select-none';
             card.style.border = `2px solid ${color}`;
-            
-            // Attach state
+
             card.setAttribute('data-doc-id', docId);
             card.setAttribute('data-page-index', pageIndex);
             card.setAttribute('data-rotation-degrees', 0);
-            
-            // Store the source canvas in memory on the element for redrawing
-            card.sourceCanvas = sourceCanvas; 
 
-            // Display Canvas
+            card.sourceCanvas = sourceCanvas;
+
+            if (collapsedDocuments.has(parseInt(docId)) && pageIndex > 0) {
+                card.classList.add('hidden');
+            }
+
+            // REMOVED manual click listener. Sortable handles it now.
+
             const displayCanvas = document.createElement('canvas');
             displayCanvas.className = 'display-canvas';
-            // Initial draw
             displayCanvas.width = width;
             displayCanvas.height = height;
             displayCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0);
-            
             card.appendChild(displayCanvas);
 
             // Overlays
             const numberOverlay = document.createElement('div');
             numberOverlay.className = 'absolute bottom-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm pointer-events-none shadow-sm z-10';
-            numberOverlay.style.backgroundColor = color; 
+            numberOverlay.style.backgroundColor = color;
             numberOverlay.innerText = labelText;
 
+            // Delete Button
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md opacity-0 transition-opacity duration-200 z-20';
             deleteBtn.innerHTML = '<i class="fa-solid fa-times"></i>';
-            deleteBtn.onclick = (e) => { e.stopPropagation(); removePage(card); };
+            deleteBtn.onclick = (e) => {
+                // Stop propagation prevents dragging when clicking delete
+                e.stopPropagation();
+                removePage(card);
+            };
 
+            // Rotate Button
             const rotateBtn = document.createElement('button');
             rotateBtn.className = 'rotate-btn absolute top-2 left-2 bg-slate-700/80 hover:bg-slate-800 text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md opacity-0 transition-opacity duration-200 z-20';
             rotateBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i>';
-            rotateBtn.onclick = (e) => { e.stopPropagation(); rotatePage(card); };
+            rotateBtn.onclick = (e) => {
+                e.stopPropagation();
+                rotatePage(card);
+            };
+
+            // Expand/Collapse Button
+            const doc = loadedDocuments[docId];
+            if (doc && doc.type === 'pdf' && doc.doc.getPageCount() > 1 && pageIndex === 0) {
+                const expandBtn = document.createElement('button');
+                expandBtn.className = 'expand-btn absolute bottom-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full flex items-center gap-1.5 shadow-md text-xs font-semibold z-20 transition-all';
+                const isCollapsed = collapsedDocuments.has(parseInt(docId));
+                expandBtn.innerHTML = isCollapsed
+                    ? `<i class="fa-solid fa-chevron-down"></i> <span>${doc.doc.getPageCount()} pages</span>`
+                    : `<i class="fa-solid fa-chevron-up"></i> <span>Collapse</span>`;
+                expandBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleDocumentPages(docId, expandBtn);
+                };
+                card.appendChild(expandBtn);
+            }
 
             card.appendChild(numberOverlay);
             card.appendChild(deleteBtn);
@@ -386,16 +450,14 @@
         function rotatePage(card) {
             const displayCanvas = card.querySelector('.display-canvas');
             const sourceCanvas = card.sourceCanvas;
-            
+
             let currentRotation = parseInt(card.getAttribute('data-rotation-degrees'));
             let newRotation = (currentRotation + 90) % 360;
-            
-            // Re-draw logic
+
             const ctx = displayCanvas.getContext('2d');
             const w = sourceCanvas.width;
             const h = sourceCanvas.height;
-            
-            // Resize canvas based on rotation
+
             if (newRotation === 90 || newRotation === 270) {
                 displayCanvas.width = h;
                 displayCanvas.height = w;
@@ -404,7 +466,6 @@
                 displayCanvas.height = h;
             }
 
-            // Transform context to draw rotated image
             ctx.save();
             ctx.translate(displayCanvas.width / 2, displayCanvas.height / 2);
             ctx.rotate(newRotation * Math.PI / 180);
@@ -419,23 +480,64 @@
             updatePageCount();
         }
 
+        function toggleDocumentPages(docId, button) {
+            const docIdNum = parseInt(docId);
+            const cards = document.querySelectorAll(`[data-doc-id="${docId}"]`);
+            const isCurrentlyCollapsed = collapsedDocuments.has(docIdNum);
+
+            if (isCurrentlyCollapsed) {
+                collapsedDocuments.delete(docIdNum);
+                cards.forEach(card => {
+                    card.classList.remove('hidden');
+                });
+                button.innerHTML = '<i class="fa-solid fa-chevron-up"></i> <span>Collapse</span>';
+            } else {
+                collapsedDocuments.add(docIdNum);
+                cards.forEach((card, index) => {
+                    if (index > 0) {
+                        card.classList.add('hidden');
+                    }
+                });
+                const doc = loadedDocuments[docId];
+                button.innerHTML = `<i class="fa-solid fa-chevron-down"></i> <span>${doc.doc.getPageCount()} pages</span>`;
+            }
+            updatePageCount();
+        }
+
         function updatePageCount() {
-            const count = document.querySelectorAll('.page-card').length;
+            const count = document.querySelectorAll('.page-card:not(.hidden)').length;
             pageCountLabel.innerText = `${count} pages total`;
         }
 
         function initSortable() {
             if (window.sortableInstance) return;
+
             window.sortableInstance = new Sortable(grid, {
                 animation: 150,
+
+                // --- MULTI-SELECT CONFIGURATION ---
+                multiDrag: true,           // Enable multi-drag
+                selectedClass: 'selected', // Class applied to selected items
+                multiDragKey: 'CTRL',      // Key to trigger selection (CTRL click)
+
+                // Prevent buttons from triggering drag/select
+                filter: 'button, .delete-btn, .rotate-btn, .expand-btn',
+                preventOnFilter: false,    // Allows button clicks to still work
+
                 ghostClass: 'sortable-ghost',
                 dragClass: 'sortable-drag',
                 delay: 0,
-                // Auto-scroll configuration
-                scroll: document.getElementById('mainArea'), // The container to scroll
-                scrollSensitivity: 150, // Distance from edge (px) to trigger scroll
-                scrollSpeed: 20, // Speed of the scrolling
-                bubbleScroll: true // Apply scroll to parent elements if needed
+
+                // Auto-scroll
+                scroll: document.getElementById('mainArea'),
+                scrollSensitivity: 150,
+                scrollSpeed: 20,
+                bubbleScroll: true,
+
+                onEnd: function (evt) {
+                    // Optional: Deselect after drag if desired.
+                    // Currently kept selected to allow repeated moves.
+                }
             });
         }
 
@@ -446,32 +548,26 @@
 
             try {
                 const newPdfDoc = await PDFLib.PDFDocument.create();
-                const cards = document.querySelectorAll('.page-card');
-                
+                const cards = document.querySelectorAll('.page-card:not(.hidden)');
+
                 if (cards.length === 0) throw new Error("No pages to save");
 
                 for (const card of cards) {
                     const docId = card.getAttribute('data-doc-id');
                     const pageIndex = parseInt(card.getAttribute('data-page-index'));
                     const userRotation = parseInt(card.getAttribute('data-rotation-degrees')) || 0;
-                    
+
                     const sourceData = loadedDocuments[docId];
                     if (!sourceData) continue;
 
                     if (sourceData.type === 'pdf') {
-                        // PDF Processing
                         const [copiedPage] = await newPdfDoc.copyPages(sourceData.doc, [pageIndex]);
-                        
-                        // Handle Rotation Logic for PDF pages
-                        // We must add user rotation to existing page rotation
                         const existingRotation = copiedPage.getRotation().angle;
                         const finalRotation = (existingRotation + userRotation) % 360;
                         copiedPage.setRotation(PDFLib.degrees(finalRotation));
-                        
                         newPdfDoc.addPage(copiedPage);
 
                     } else if (sourceData.type === 'image') {
-                        // Image Processing
                         let image;
                         if (sourceData.mimeType === 'image/jpeg') {
                             image = await newPdfDoc.embedJpg(sourceData.fileData);
@@ -480,8 +576,6 @@
                         }
 
                         const page = newPdfDoc.addPage([image.width, image.height]);
-                        
-                        // Draw image
                         page.drawImage(image, {
                             x: 0,
                             y: 0,
@@ -489,7 +583,6 @@
                             height: image.height,
                         });
 
-                        // Apply User Rotation
                         if (userRotation !== 0) {
                             page.setRotation(PDFLib.degrees(userRotation));
                         }
@@ -528,10 +621,16 @@
             progressContainer.classList.add('hidden');
             fileInput.value = '';
             loadedDocuments = {};
+            collapsedDocuments.clear();
             nextDocId = 1;
             saveBtn.disabled = true;
+            if (window.sortableInstance) {
+                // Clear any selection state
+                Sortable.utils.deselect(window.sortableInstance.el);
+            }
             updatePageCount();
         }
     </script>
 </body>
+
 </html>
