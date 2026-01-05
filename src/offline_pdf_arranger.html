@@ -391,8 +391,6 @@
                 card.classList.add('hidden');
             }
 
-            // REMOVED manual click listener. Sortable handles it now.
-
             const displayCanvas = document.createElement('canvas');
             displayCanvas.className = 'display-canvas';
             displayCanvas.width = width;
@@ -535,8 +533,28 @@
                 bubbleScroll: true,
 
                 onEnd: function (evt) {
-                    // Optional: Deselect after drag if desired.
-                    // Currently kept selected to allow repeated moves.
+                    if (evt.newIndex === undefined || evt.newIndex === evt.oldIndex) return;
+                    
+                    // Get the dragged item(s)
+                    const items = evt.items || [evt.item];
+                    const container = evt.to;
+                    const allChildren = Array.from(container.children);
+                    
+                    // Remove the dragged items from the DOM temporarily
+                    items.forEach(item => item.remove());
+                    
+                    // Get the remaining items
+                    const remainingChildren = Array.from(container.children);
+                    
+                    // Calculate insertion point
+                    let insertionIndex = Math.min(evt.newIndex, remainingChildren.length);
+                    
+                    // Insert items at the calculated position
+                    if (insertionIndex >= remainingChildren.length) {
+                        items.forEach(item => container.appendChild(item));
+                    } else {
+                        remainingChildren[insertionIndex].before(...items);
+                    }
                 }
             });
         }
@@ -547,8 +565,15 @@
             saveBtn.disabled = true;
 
             try {
+                // Temporarily expand all collapsed documents to include all pages
+                const wasCollapsed = new Set(collapsedDocuments);
+                wasCollapsed.forEach(docId => {
+                    const cards = document.querySelectorAll(`[data-doc-id="${docId}"]`);
+                    cards.forEach(card => card.classList.remove('hidden'));
+                });
+
                 const newPdfDoc = await PDFLib.PDFDocument.create();
-                const cards = document.querySelectorAll('.page-card:not(.hidden)');
+                const cards = document.querySelectorAll('.page-card');
 
                 if (cards.length === 0) throw new Error("No pages to save");
 
@@ -591,6 +616,14 @@
 
                 const pdfBytes = await newPdfDoc.save();
                 downloadBlob(pdfBytes, 'combined_document.pdf', 'application/pdf');
+
+                // Restore collapsed state
+                wasCollapsed.forEach(docId => {
+                    const cards = document.querySelectorAll(`[data-doc-id="${docId}"]`);
+                    cards.forEach((card, index) => {
+                        if (index > 0) card.classList.add('hidden');
+                    });
+                });
 
             } catch (err) {
                 console.error(err);
